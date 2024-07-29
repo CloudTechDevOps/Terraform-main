@@ -1,0 +1,15 @@
+node {
+   
+    stage('git checkout') { 
+       git branch: 'main', url: 'https://github.com/CloudTechDevOps/Terraform.git' 
+    }
+    stage('init') {
+       dir('day-2-basic_code'){
+          
+           sh 'terraform init'
+       }
+       }
+    stage('apply') {
+         sh 'terraform destroy -auto-approve'
+}
+}

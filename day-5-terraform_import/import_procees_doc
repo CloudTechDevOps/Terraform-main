@@ -1,0 +1,186 @@
+Why Import?
+Terraform is a relatively new technology and adopting it to manage an organisation’s cloud resources might take some time and effort. The lack of human resources and the steep learning curve involved in using Terraform effectively causes teams to start using cloud infrastructure directly via their respective web consoles.
+
+For that matter, any kind of IaC method (CloudFormation, Azure ARM templates, Pulumi, etc.) requires some training and real-time scenario handling experience. Things get especially complicated when dealing with concepts like states and remote backends. In a worst case scenario, you can lose the terraform.tfstate file. Luckily, you can use the import functionality to rebuild it.
+
+Getting the pre-existing cloud resources under the Terraform management is facilitated by Terraform import. import is a Terraform CLI command which is used to read real-world infrastructure and update the state, so that future updates to the same set of infrastructure can be applied via IaC.
+
+The import functionality helps update the state locally and it does not create the corresponding configuration automatically. However, the Terraform team is working hard to improve this function in upcoming releases.
+
+Simple Import
+With an understanding of why we need to import cloud resources, let us begin by importing a simple resource – EC2 instance in AWS. I am assuming the Terraform installation and configuration of AWS credentials in AWS CLI is already done locally. We will not go into the details of that in this tutorial. To import a simple resource into Terraform, follow the below step-by-step guide. 
+
+1. Prepare the EC2 Instance
+Assuming the Terraform installation and configuration of AWS credentials in AWS CLI is already done locally, begin by importing a simple resource—EC2 instance in AWS. For the sake of this tutorial, we will create an EC2 resource manually to be imported. This could be an optional step if you already have a target resource to be imported.
+
+Terraform: Create EC2 Instance in Existing VPC
+Go ahead and provision an EC2 instance in your AWS account. Here are the example details of the EC2 instance thus created:
+
+Name: MyVM
+Instance ID: i-0b9be609418aa0609
+Type: t2.micro
+VPC ID: vpc-1827ff72
+…
+
+2. Create main.tf and Set Provider Configuration
+The aim of this step is to import this EC2 instance into our Terraform configuration. In your desired path, create `main.tf` and configure the AWS provider. The file should look like the one below.
+
+Importing EC2 Instance into Terraform Configuration: Example
+// Provider configuration
+terraform {
+ required_providers {
+   aws = {
+     source  = "hashicorp/aws"
+     version = "~> 3.0"
+   }
+ }
+}
+ 
+provider "aws" {
+ region = "us-east-1"
+}
+Run terraform init to initialize the Terraform modules. Below is the output of a successful initialization.
+
+Initializing the backend...
+
+Initializing provider plugins...
+- Finding hashicorp/aws versions matching "~> 3.0"...
+- Installing hashicorp/aws v3.51.0...
+- Installed hashicorp/aws v3.51.0 (signed by HashiCorp)
+
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+
+You may now begin working with Terraform. Try running "terraform plan" to see
+any changes that are required for your infrastructure. All Terraform commands
+should now work.
+
+If you ever set or change modules or backend configuration for Terraform,
+rerun this command to reinitialize your working directory. If you forget, other
+commands will detect it and remind you to do so if necessary.
+
+3. Write Config for Resource To Be Imported
+As discussed earlier, Terraform import does not generate the configuration files by itself. Thus, you need to create the corresponding configuration for the EC2 instance manually. This doesn’t need many arguments as we will have to add or modify them when we import the EC2 instance into our state file.
+
+However, if you don’t mind not seeing colorful output on CLI, you can begin adding all the arguments you know. But this is not a foolproof approach, because normally the infrastructure you may have to import will not have been created by you. So it is best to skip a few arguments anyway.
+
+In a moment we will take a look at how to adjust our configuration to reflect the exact resource. For now, append the main.tf file with EC2 config. For example, I have used the below config. The only reason I have included ami and instance_type attribute, is that they are the required arguments for aws_instance resource block.
+
+resource "aws_instance" "myvm" {
+ ami           = "unknown"(we need to add from state file reference)
+ instance_type = "unknown"(we need to add from state file reference)
+}
+4. Import
+Think of it as if the cloud resource (EC2 instance) and its corresponding configuration were available in our files. All that’s left to do is to map the two into our state file. We do that by running the import command as follows.
+
+import command:
+
+terraform import aws_instance.myvm <Instance ID>
+A successful output should look like this:
+
+aws_instance.myvm: Importing from ID "i-0b9be609418aa0609"...
+aws_instance.myvm: Import prepared!
+  Prepared aws_instance for import
+aws_instance.myvm: Refreshing state... [id=i-0b9be609418aa0609]
+
+Import successful!
+
+The resources that were imported are shown above. These resources are now in
+your Terraform state and will henceforth be managed by Terraform.
+The above command maps the aws_instance.myvm configuration to the EC2 instance using the ID. By mapping I mean that the state file now “knows” the existence of the EC2 instance with the given ID. The state file also contains information about each attribute of this EC2 instance, as it has fetched the same using the import command.
+
+5. Observe State Files and Plan Output
+Please notice that the directory now also contains terraform.tfstate file. This file was generated after the import command was successfully run. Take a moment to go through the contents of this file.
+
+Right now our configuration does not reflect all the attributes. Any attempt to plan/apply this configuration will fail because we have not adjusted the values of its attributes. To close the gap in configuration files and state files, run terraform plan and observe the output.
+
+.
+.
+.
+          } -> (known after apply)
+          ~ throughput            = 0 -> (known after apply)
+          ~ volume_id             = "vol-0fa93084426be508a" -> (known after apply)
+          ~ volume_size           = 8 -> (known after apply)
+          ~ volume_type           = "gp2" -> (known after apply)
+        }
+
+      - timeouts {}
+    }
+
+Plan: 1 to add, 0 to change, 1 to destroy.
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't guarantee to take exactly these actions if you run "terraform apply"
+now.
+The plan indicates that it would attempt to replace the EC2 instance. But this goes completely against our purpose. We could do it anyway by simply not caring about the existing resources, and creating new resources using configuration.
+
+The good news is that Terraform has taken note of the existence of an EC2 instance that is associated with its state. 
+
+6. Improve Config To Avoid Replacement
+At this point, it is important to understand that the terraform.tfstate file is a vital piece of reference for Terraform. All of its future operations are performed with consideration for this state file. You need to investigate the state file and update your configuration accordingly so that there is a minimum difference between them.
+
+The use of the word “minimum” is intentional here. Right now, you need to focus on not replacing the given EC2 instance, but rather aligning the configuration so that the replacement can be avoided. Eventually, you would achieve a state of 0 difference.
+
+Observe the plan output, and find all those attributes which cause the replacement. The plan output will highlight the same. In our example, the only attribute that causes replacement is the AMI ID. Closing this gap should avoid the replacement of the EC2 instance.
+
+Change the value of ami from “unknown” to what is highlighted in the plan output, and run terraform plan again. Notice the output.
+
+Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
+  ~ update in-place
+
+Terraform will perform the following actions:
+
+  # aws_instance.myvm will be updated in-place
+  ~ resource "aws_instance" "myvm" {
+        id                                   = "i-0b9be609418aa0609"
+      ~ instance_type                        = "t2.micro" -> "unknown"
+      ~ tags                                 = {
+          - "Name" = "MyVM" -> null
+        }
+      ~ tags_all                             = {
+          - "Name" = "MyVM"
+        } -> (known after apply)
+        # (27 unchanged attributes hidden)
+
+
+
+
+
+
+        # (6 unchanged blocks hidden)
+    }
+
+Plan: 0 to add, 1 to change, 0 to destroy.
+This time the plan does not indicate the replacement of the EC2 instance. If you get the same output, you are successful in partially importing our cloud resource. You are currently in a state of lowered risk—if we apply the configuration now, the resource will not be replaced, but a few attributes would change.
+
+
+
+5 Ways to Manage Terraform at Scale
+How to Automate Terraform Deployments and Infrastructure Provisioning
+Why DevOps Engineers Recommend Spacelift
+7. Improve Config To Avoid Changes
+If we want to achieve a state of 0 difference, you need to align your resource block even more. The plan output highlights the attribute changes using ~ sign. It also indicates the difference in the values. For example, it highlights the change in the instance_type value from “t2.micro” to “unknown”.
+
+In other words, if the value of instance_type had been “t2.micro”, Terraform would NOT have asked for a change. Similarly, you can see there are changes to the tags highlighted as well. Let’s change the configuration accordingly so that we close these gaps. The final aws_instance resource block should look as follows:
+
+resource "aws_instance" "myvm" {
+ ami           = "ami-00f22f6155d6d92c5"
+ instance_type = "t2.micro"
+ 
+ tags = {
+     "Name": "MyVM"
+ }
+}
+Run terraform plan again, and observe the output.
+
+aws_instance.myvm: Refreshing state... [id=i-0b9be609418aa0609]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration and found no differences, so no changes are needed.
+If you have the same output, congratulations, as you have successfully imported a cloud resource into your Terraform config. It is now possible to manage this configuration via Terraform directly, without any surprises.
