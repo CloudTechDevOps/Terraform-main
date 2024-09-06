@@ -2,6 +2,7 @@
 
 variable "main_allocated_storage"{
 type = number
+description = "strorge"
 }
 variable "main_db_engine"{
 type = number
