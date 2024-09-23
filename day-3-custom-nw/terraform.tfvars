@@ -1,4 +1,4 @@
- ami = "ami-0440d3b780d96b29d"
+ ami = "ami-0ebfd941bbafe70c6"
  instance_type ="t2.micro"
- key_name = "linuxnv"
+ key_name = "ammu"
  
