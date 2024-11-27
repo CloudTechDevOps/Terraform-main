@@ -3,7 +3,7 @@ resource "aws_instance" "web" {
   instance_type          = "t2.large"
   key_name               = "vscode"              #change key name as per your setup
   vpc_security_group_ids = [aws_security_group.devops-project-veera.id]
-  user_data              = templatefile("./install.sh", {})
+  user_data              = file("install.sh")
 
   tags = {
     Name = "project-MainEc2"
